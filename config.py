@@ -4,7 +4,7 @@ Configuration file for the Telegram Task & Reward Bot
 
 import os
 
-# Bot Configuration
+# Bot Configuration - আপনার টোকেন দেওয়া আছে
 BOT_TOKEN = "8691371811:AAH1EWuhbIImkl-2x-yOWlPikkP1NjEAeUg"
 
 # Bot Username (for referral links)
@@ -13,7 +13,10 @@ BOT_USERNAME = "NeroxaTasks_Bot"
 # Firebase Configuration
 FIREBASE_DB_URL = "https://telegram-bot-e6095-default-rtdb.firebaseio.com/"
 
-# Admin Configuration
+# Firebase Credentials File Name
+FIREBASE_CREDENTIALS_FILE = "telegram-bot-e6095-firebase-adminsdk-fbsvc-c4bce032f0.json"
+
+# Admin Configuration - আপনার এডমিন আইডি দেওয়া আছে
 ADMIN_USER_IDS = [8502686983]
 
 # Referral System
