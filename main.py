@@ -18,14 +18,9 @@ import user
 import admin
 import utils
 
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import conversation states
 from user import (
     MAIN_MENU, TASKS_MENU, WITHDRAW_MENU, REFERRAL_MENU, ADMIN_MENU,
     VIEWING_LEADERBOARD, VIEWING_BALANCE, REMOVING_TASK,
@@ -37,284 +32,141 @@ from user import (
 from admin import (
     AWAITING_TASK_TITLE, AWAITING_TASK_DESC, AWAITING_TASK_LINK,
     AWAITING_TASK_REWARD, AWAITING_GIFT_AMOUNT, AWAITING_GIFT_LIMIT,
-    AWAITING_GIFT_EXPIRY, AWAITING_BROADCAST, FORCE_JOIN_MENU
+    AWAITING_GIFT_EXPIRY, AWAITING_BROADCAST
 )
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle errors in the bot"""
-    logger.error(f"Update {update} caused error {context.error}")
-    
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Error: {context.error}")
     if update and update.effective_chat:
-        await update.effective_chat.send_message(
-            "❌ An error occurred. Please try again later."
-        )
+        await update.effective_chat.send_message("❌ An error occurred!")
 
-async def post_init(application: Application) -> None:
-    """Initialize database and other components after bot starts"""
-    logger.info("🤖 Bot is starting up...")
-    
-    # Initialize database
+async def post_init(application: Application):
+    logger.info("🤖 Bot starting...")
     try:
         db = Database()
-        logger.info("✅ Database initialized successfully")
+        logger.info("✅ Database connected!")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize database: {e}")
+        logger.error(f"❌ Database error: {e}")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle all text messages"""
-    if not update.message or not update.message.text:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or update.message.text.startswith('/'):
         return
     
-    # Skip commands
-    if update.message.text.startswith('/'):
-        return
-    
-    # Get current state
     state = context.user_data.get('state', MAIN_MENU)
     
-    # Route to appropriate handler based on state
     if state == MAIN_MENU:
-        new_state = await user.handle_main_menu(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await user.handle_main_menu(update, context)
     elif state == TASKS_MENU:
-        new_state = await user.handle_tasks_menu(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await user.handle_tasks_menu(update, context)
     elif state == WITHDRAW_MENU:
-        new_state = await user.handle_withdraw_menu(update, context)
-        context.user_data['state'] = new_state
-    elif state == REFERRAL_MENU:
-        new_state = await user.handle_referral_menu(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await user.handle_withdraw_menu(update, context)
     elif state == ADMIN_MENU:
-        new_state = await admin.handle_admin_menu(update, context)
-        context.user_data['state'] = new_state
-    elif state == VIEWING_LEADERBOARD:
-        new_state = await user.handle_leaderboard_menu(update, context)
-        context.user_data['state'] = new_state
-    elif state == VIEWING_BALANCE:
-        new_state = await user.show_balance(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await admin.handle_admin_menu(update, context)
     elif state == REMOVING_TASK:
-        new_state = await admin.handle_remove_task(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await admin.handle_remove_task(update, context)
     elif state == PENDING_SUBMISSIONS:
-        new_state = await admin.handle_pending_submissions(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await admin.show_pending_submissions(update, context)
     elif state == MANAGING_WITHDRAWALS:
-        new_state = await admin.handle_withdrawals(update, context)
-        context.user_data['state'] = new_state
-    elif state == VIEWING_ANALYTICS:
-        new_state = await admin.show_analytics(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await admin.show_pending_withdrawals(update, context)
     else:
-        # Default to main menu handler
-        new_state = await user.handle_main_menu(update, context)
-        context.user_data['state'] = new_state
+        context.user_data['state'] = await user.handle_main_menu(update, context)
 
-async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle commands that don't have dedicated handlers"""
+async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     
     text = update.message.text
     
-    # Handle approve/reject commands
     if text.startswith('/approve_'):
-        submission_id = text.split('_')[1]
-        success = await admin.db.approve_submission(submission_id)
-        if success:
-            await update.message.reply_text(f"✅ Submission {submission_id} approved!")
-        else:
-            await update.message.reply_text(f"❌ Failed to approve submission!")
-    
+        sub_id = text.split('_')[1]
+        await db.approve_submission(sub_id)
+        await update.message.reply_text(f"✅ Submission {sub_id} approved!")
     elif text.startswith('/reject_'):
-        submission_id = text.split('_')[1]
-        success = await admin.db.reject_submission(submission_id, "Task not completed properly")
-        if success:
-            await update.message.reply_text(f"❌ Submission {submission_id} rejected!")
-        else:
-            await update.message.reply_text(f"❌ Failed to reject submission!")
-    
+        sub_id = text.split('_')[1]
+        await db.reject_submission(sub_id, "Not completed properly")
+        await update.message.reply_text(f"❌ Submission {sub_id} rejected!")
     elif text.startswith('/approve_withdraw_'):
-        withdrawal_id = text.split('_')[2]
-        success = await admin.db.process_withdrawal(withdrawal_id, 'approved')
-        if success:
-            await update.message.reply_text(f"✅ Withdrawal {withdrawal_id} approved!")
-        else:
-            await update.message.reply_text(f"❌ Failed to approve withdrawal!")
-    
+        w_id = text.split('_')[2]
+        await db.process_withdrawal(w_id, 'approved')
+        await update.message.reply_text(f"✅ Withdrawal {w_id} approved!")
     elif text.startswith('/reject_withdraw_'):
-        withdrawal_id = text.split('_')[2]
-        success = await admin.db.process_withdrawal(withdrawal_id, 'rejected', "Request rejected")
-        if success:
-            await update.message.reply_text(f"❌ Withdrawal {withdrawal_id} rejected!")
-        else:
-            await update.message.reply_text(f"❌ Failed to reject withdrawal!")
-    
-    elif text == '/next':
-        # This will be handled by the state handlers
-        pass
-    
-    elif text == '/prev':
-        pass
-    
-    elif text == '/done':
-        pass
+        w_id = text.split('_')[2]
+        await db.process_withdrawal(w_id, 'rejected', "Rejected")
+        await update.message.reply_text(f"❌ Withdrawal {w_id} rejected!")
 
-def main() -> None:
-    """Start the bot"""
-    # Create application
+def main():
     application = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
     
-    # --- Conversation Handlers ---
-    
-    # Task submission conversation
-    task_submission_conv = ConversationHandler(
+    # Conversations
+    task_conv = ConversationHandler(
         entry_points=[CommandHandler('submit', user.submit_task_command)],
         states={
-            AWAITING_TASK_SUBMIT_SCREENSHOT: [
-                MessageHandler(filters.PHOTO, user.receive_screenshot),
-                CommandHandler('cancel', user.cancel)
-            ],
-            AWAITING_TASK_SUBMIT_NOTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, user.receive_submission_note),
-                CommandHandler('skip', user.skip_note),
-                CommandHandler('cancel', user.cancel)
-            ]
+            AWAITING_TASK_SUBMIT_SCREENSHOT: [MessageHandler(filters.PHOTO, user.receive_screenshot)],
+            AWAITING_TASK_SUBMIT_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, user.receive_submission_note)],
         },
-        fallbacks=[
-            CommandHandler('cancel', user.cancel),
-            MessageHandler(filters.ALL, user.cancel)
-        ],
-        name="task_submission",
-        persistent=False
+        fallbacks=[CommandHandler('cancel', user.cancel)]
     )
     
-    # Withdrawal conversation
-    withdrawal_conv = ConversationHandler(
+    withdraw_conv = ConversationHandler(
         entry_points=[CommandHandler('withdraw', user.request_withdrawal)],
-        states={
-            AWAITING_WITHDRAW_AMOUNT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, user.process_withdrawal_amount),
-                CommandHandler('cancel', user.cancel)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', user.cancel)],
-        name="withdrawal",
-        persistent=False
+        states={AWAITING_WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, user.process_withdrawal_amount)]},
+        fallbacks=[CommandHandler('cancel', user.cancel)]
     )
     
-    # Redeem conversation
     redeem_conv = ConversationHandler(
         entry_points=[CommandHandler('redeem', user.start_redeem)],
-        states={
-            AWAITING_GIFT_CODE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, user.process_redeem),
-                CommandHandler('cancel', user.cancel)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', user.cancel)],
-        name="redeem",
-        persistent=False
+        states={AWAITING_GIFT_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, user.process_redeem)]},
+        fallbacks=[CommandHandler('cancel', user.cancel)]
     )
     
-    # Add task conversation (admin)
     add_task_conv = ConversationHandler(
         entry_points=[CommandHandler('addtask', admin.start_add_task)],
         states={
-            AWAITING_TASK_TITLE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_title),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ],
-            AWAITING_TASK_DESC: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_description),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ],
-            AWAITING_TASK_LINK: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_link),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ],
-            AWAITING_TASK_REWARD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_reward),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ]
+            AWAITING_TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_title)],
+            AWAITING_TASK_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_description)],
+            AWAITING_TASK_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_link)],
+            AWAITING_TASK_REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.add_task_reward)],
         },
-        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)],
-        name="add_task",
-        persistent=False
+        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)]
     )
     
-    # Create gift code conversation (admin)
-    gift_code_conv = ConversationHandler(
+    gift_conv = ConversationHandler(
         entry_points=[CommandHandler('creategift', admin.start_create_gift_code)],
         states={
-            AWAITING_GIFT_AMOUNT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_amount),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ],
-            AWAITING_GIFT_LIMIT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_limit),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ],
-            AWAITING_GIFT_EXPIRY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_expiry),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ]
+            AWAITING_GIFT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_amount)],
+            AWAITING_GIFT_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_limit)],
+            AWAITING_GIFT_EXPIRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.create_gift_expiry)],
         },
-        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)],
-        name="gift_code",
-        persistent=False
+        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)]
     )
     
-    # Broadcast conversation (admin)
     broadcast_conv = ConversationHandler(
         entry_points=[CommandHandler('broadcast', admin.start_broadcast)],
-        states={
-            AWAITING_BROADCAST: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin.send_broadcast),
-                CommandHandler('cancel', admin.show_admin_menu)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)],
-        name="broadcast",
-        persistent=False
+        states={AWAITING_BROADCAST: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin.send_broadcast)]},
+        fallbacks=[CommandHandler('cancel', admin.show_admin_menu)]
     )
     
-    # --- Command Handlers ---
+    # Handlers
     application.add_handler(CommandHandler("start", user.start))
     application.add_handler(CommandHandler("menu", user.start))
-    
-    # Admin commands
     application.add_handler(CommandHandler("admin", admin.show_admin_menu))
-    
-    # User commands
     application.add_handler(CommandHandler("balance", user.show_balance))
     application.add_handler(CommandHandler("tasks", user.list_tasks))
     application.add_handler(CommandHandler("referral", user.show_referral_menu))
     application.add_handler(CommandHandler("leaderboard", user.show_leaderboard_menu))
-    application.add_handler(CommandHandler("support", user.show_support))
     
-    # --- Conversation Handlers ---
-    application.add_handler(task_submission_conv)
-    application.add_handler(withdrawal_conv)
+    application.add_handler(task_conv)
+    application.add_handler(withdraw_conv)
     application.add_handler(redeem_conv)
     application.add_handler(add_task_conv)
-    application.add_handler(gift_code_conv)
+    application.add_handler(gift_conv)
     application.add_handler(broadcast_conv)
     
-    # --- Message Handler (for buttons) ---
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # --- Command Handler for various commands ---
     application.add_handler(MessageHandler(filters.COMMAND, command_handler))
-    
-    # --- Error Handler ---
     application.add_error_handler(error_handler)
     
-    # --- Start the bot ---
-    logger.info("🚀 Starting bot...")
-    logger.info(f"📱 Bot username: @{config.BOT_USERNAME}")
-    logger.info(f"👑 Admin ID: {config.ADMIN_USER_IDS}")
+    logger.info("🚀 Bot started!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
